@@ -380,17 +380,8 @@
     .stat-card .stat-value { font-size: 0.92rem; }
   }
 
-  /* ── Saving indicator ── */
-  .saving-indicator {
-    position: fixed; top: 12px; right: 12px; z-index: 500;
-    background: #fff; border: 1px solid #e5e5ea; border-radius: 8px;
-    padding: 6px 14px; font-size: 0.78rem; color: #6e6e73; font-weight: 600;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 8px;
-  }
-  .saving-dot {
-    width: 8px; height: 8px; border-radius: 50%; background: #ff9f0a;
-    animation: pulse 0.8s infinite;
-  }
+  /* ── Button loading ── */
+  button.loading { opacity: 0.6; pointer-events: none; }
 
   /* ── Lock screen ── */
   .lock-screen {
@@ -420,11 +411,6 @@
 </style>
 </head>
 <body>
-
-<!-- Saving indicator -->
-<div class="saving-indicator" id="savingIndicator" style="display:none">
-  <div class="saving-dot"></div> Saving...
-</div>
 
 <!-- Lock screen -->
 <div class="lock-screen" id="lockScreen">
@@ -472,7 +458,7 @@
       <div class="ac-balance" id="haroldBalance"></div>
       <div class="ac-form">
         <input type="number" id="haroldInput" step="1000" placeholder="Bank balance" />
-        <button onclick="updateAccount('harold')">Set</button>
+        <button onclick="updateAccount('harold',this)">Set</button>
       </div>
     </div>
     <div class="account-card yssa">
@@ -481,7 +467,7 @@
       <div class="ac-balance" id="yssaBalance"></div>
       <div class="ac-form">
         <input type="number" id="yssaInput" step="1000" placeholder="Bank balance" />
-        <button onclick="updateAccount('yssa')">Set</button>
+        <button onclick="updateAccount('yssa',this)">Set</button>
       </div>
     </div>
   </div>
@@ -583,7 +569,7 @@
     <div class="settings-hint">Deploy your Google Apps Script as a web app and paste the URL here.</div>
 
     <div class="settings-actions" id="syncActions" style="display:none">
-      <button class="settings-btn" onclick="syncFromSheet()">Sync Now</button>
+      <button class="settings-btn" onclick="syncNow(this)">Sync Now</button>
       <button class="settings-btn danger" onclick="disconnectSheets()">Disconnect</button>
     </div>
   </div>
@@ -856,11 +842,12 @@ function toggleCheck(m,j,checked) {
   saveLocal(); render();
   pushToggle(m,j,checked); pushSavings();
 }
-function updateAccount(who) {
-  const v=parseInt(document.getElementById(who==='harold'?'haroldInput':'yssaInput').value);
+function updateAccount(who, btn) {
+  var v=parseInt(document.getElementById(who==='harold'?'haroldInput':'yssaInput').value);
   if(isNaN(v)||v<0) return;
   if(who==='harold') state.haroldBalance=v; else state.yssaBalance=v;
-  saveLocal(); render(); pushSavings();
+  saveLocal(); render();
+  pushToSheet({ action: 'updateBalances', haroldBalance: state.haroldBalance, yssaBalance: state.yssaBalance }, btn);
 }
 
 // Google Sheets sync
@@ -914,21 +901,23 @@ async function syncFromSheet() {
   }
 }
 
-var pushQueue = 0;
-function showSaving() {
-  pushQueue++;
-  document.getElementById('savingIndicator').style.display = 'flex';
-}
-function hideSaving() {
-  pushQueue = Math.max(0, pushQueue - 1);
-  if (pushQueue === 0) document.getElementById('savingIndicator').style.display = 'none';
+function btnLoading(btn, loading) {
+  if (!btn) return;
+  if (loading) {
+    btn._origText = btn.textContent;
+    btn.textContent = 'Saving...';
+    btn.classList.add('loading');
+  } else {
+    btn.textContent = btn._origText || 'Done';
+    btn.classList.remove('loading');
+  }
 }
 
-async function pushToSheet(payload) {
+async function pushToSheet(payload, triggerBtn) {
   if (!SCRIPT_URL) return;
-  showSaving();
+  btnLoading(triggerBtn, true);
   try {
-    var r = await fetch(SCRIPT_URL, {
+    await fetch(SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(payload),
@@ -936,28 +925,28 @@ async function pushToSheet(payload) {
     });
     console.log('Push OK:', payload.action);
   } catch(err) { console.error('Push failed:', payload.action, err); }
-  hideSaving();
+  btnLoading(triggerBtn, false);
 }
 
 function pushToggle(m, c, v) {
   pushToSheet({ action: 'toggleIncome', toggle: { month: m, col: c, value: v },
     haroldBalance: state.haroldBalance, yssaBalance: state.yssaBalance });
 }
-function pushSavings() {
-  pushToSheet({ action: 'updateBalances',
-    haroldBalance: state.haroldBalance, yssaBalance: state.yssaBalance });
-}
 function pushBudgetToggle(key, value) {
   pushToSheet({ action: 'toggleBudget', key: key, value: value });
-}
-function pushBudgetItems() {
-  pushToSheet({ action: 'saveBudgetItems', items: BUDGET_ITEMS });
 }
 function saveScriptUrl(){
   const u=document.getElementById('scriptUrlInput').value.trim();
   if(!u)return;
   SCRIPT_URL=u; localStorage.setItem(URL_KEY,u);
   updateSettingsUI(); syncFromSheet();
+}
+async function syncNow(btn) {
+  btnLoading(btn, true);
+  btn.textContent = 'Syncing...';
+  await syncFromSheet();
+  btnLoading(btn, false);
+  btn.textContent = 'Sync Now';
 }
 function disconnectSheets(){
   if(!confirm('Disconnect from Google Sheets?'))return;
@@ -1054,15 +1043,15 @@ function toggleBudgetItem(month, period, index) {
   pushBudgetToggle(key, budgetState[key]);
 }
 
-function addBudgetItem(period) {
-  const nameEl = document.getElementById('addName_' + period);
-  const amtEl = document.getElementById('addAmt_' + period);
-  const name = nameEl.value.trim();
-  const amount = parseFloat(amtEl.value) || 0;
+function addBudgetItem(period, btn) {
+  var nameEl = document.getElementById('addName_' + period);
+  var amtEl = document.getElementById('addAmt_' + period);
+  var name = nameEl.value.trim();
+  var amount = parseFloat(amtEl.value) || 0;
   if (!name) return;
-  BUDGET_ITEMS[period].push({ name, amount });
+  BUDGET_ITEMS[period].push({ name: name, amount: amount });
   saveBudgetItems();
-  pushBudgetItems();
+  pushToSheet({ action: 'saveBudgetItems', items: BUDGET_ITEMS }, btn);
   nameEl.value = ''; amtEl.value = '';
   renderBudget();
   updateBudgetBadge();
@@ -1136,7 +1125,7 @@ function renderBudget() {
         <div class="budget-add-row">
           <input type="text" id="addName_${period}" placeholder="Bill name" />
           <input type="number" id="addAmt_${period}" placeholder="Amount" step="100" />
-          <button onclick="addBudgetItem('${period}')">Add</button>
+          <button onclick="addBudgetItem('${period}',this)">Add</button>
         </div>
       </div>
     </div>`;
