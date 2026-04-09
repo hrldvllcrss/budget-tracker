@@ -688,7 +688,8 @@ function showPage(name) {
 const DEFAULT_EXPECTED = { 0: [60000,60000,15000,11000,12000], 1: [60000,60000,7000,9000,12000] };
 for (let i=2;i<12;i++) DEFAULT_EXPECTED[i] = [60000,60000,15000,9000,12000];
 
-let SCRIPT_URL = localStorage.getItem(URL_KEY) || '';
+const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxjkP88ZZKaT8n_32DWcQvnSR7IvhAKSawYuwQSQIgAaBEAzkWBKImRBGgVxtxMAlnVfA/exec';
+let SCRIPT_URL = localStorage.getItem(URL_KEY) || DEFAULT_SCRIPT_URL;
 let EXPECTED = JSON.parse(JSON.stringify(DEFAULT_EXPECTED));
 let state = loadLocal();
 
