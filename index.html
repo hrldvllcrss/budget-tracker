@@ -612,15 +612,25 @@
     <p class="modal-sub">Pick a future date and add any planned expenses to see your projected savings.</p>
     <label for="forecastDate">Forecast Date</label>
     <input type="date" id="forecastDate" />
-    <label>Planned Expenses (before that date)</label>
+    <label>Additional Money Coming In</label>
+    <div class="expense-rows" id="incomeRows">
+      <div class="expense-row">
+        <input type="text" placeholder="e.g. Bonus, side gig" />
+        <input type="number" placeholder="Amount" step="100" />
+        <button onclick="removeRow(this)" title="Remove">&times;</button>
+      </div>
+    </div>
+    <button class="add-expense-btn" onclick="addRow('incomeRows')">+ Add another income</button>
+
+    <label>Planned Expenses</label>
     <div class="expense-rows" id="expenseRows">
       <div class="expense-row">
         <input type="text" placeholder="e.g. New laptop" />
         <input type="number" placeholder="Amount" step="100" />
-        <button onclick="removeExpense(this)" title="Remove">&times;</button>
+        <button onclick="removeRow(this)" title="Remove">&times;</button>
       </div>
     </div>
-    <button class="add-expense-btn" onclick="addExpenseRow()">+ Add another expense</button>
+    <button class="add-expense-btn" onclick="addRow('expenseRows')">+ Add another expense</button>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeForecast()">Cancel</button>
       <button class="btn-forecast" onclick="runForecast()">Generate Forecast</button>
@@ -1034,9 +1044,78 @@ function initConfig(){
 function openForecast(){document.getElementById('forecastModal').classList.add('open');const n=new Date(),d=new Date(n.getFullYear(),n.getMonth()+1,0);document.getElementById('forecastDate').value=d.toISOString().split('T')[0];document.getElementById('forecastDate').min=n.toISOString().split('T')[0];document.getElementById('forecastDate').max='2026-12-31';document.getElementById('forecastResult').classList.remove('show');}
 function closeForecast(){document.getElementById('forecastModal').classList.remove('open');}
 document.getElementById('forecastModal').addEventListener('click',function(e){if(e.target===this)closeForecast();});
-function addExpenseRow(){const c=document.getElementById('expenseRows'),r=document.createElement('div');r.className='expense-row';r.innerHTML='<input type="text" placeholder="e.g. Travel" /><input type="number" placeholder="Amount" step="100" /><button onclick="removeExpense(this)">&times;</button>';c.appendChild(r);}
-function removeExpense(b){const c=document.getElementById('expenseRows');if(c.children.length>1)b.parentElement.remove();else{const r=b.parentElement;r.querySelector('input[type="text"]').value='';r.querySelector('input[type="number"]').value='';}}
-function runForecast(){const ds=document.getElementById('forecastDate').value;if(!ds)return;const td=new Date(ds+'T23:59:59'),today=new Date();today.setHours(0,0,0,0);const rows=document.getElementById('expenseRows').children;let te=0;const exps=[];for(const r of rows){const n=r.querySelector('input[type="text"]').value.trim(),a=parseFloat(r.querySelector('input[type="number"]').value)||0;if(a>0){exps.push({name:n||'Unnamed',amount:a});te+=a;}}let fi=0;const ib=[];for(let m=0;m<12;m++){const e=EXPECTED[m];for(let j=0;j<5;j++){if(state.checks[m][j])continue;const id=getPaymentDate(m,j);if(id>today&&id<=td){fi+=e[j];ib.push({label:INCOME_LABELS[j],date:id,amount:e[j]});}}}const cs=getActualSavings(),pr=cs+fi-te,dd=Math.max(0,Math.ceil((td-today)/(864e5)));const gt=Object.values(EXPECTED).reduce((s,e)=>s+e.reduce((a,b)=>a+b,0),0),pp=((pr/gt)*100).toFixed(1);const res=document.getElementById('forecastResult');let h=`<h3>Forecast for ${td.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</h3>`;h+=`<div class="fr-row"><span class="fr-label">Current Savings</span><span class="fr-value blue">${fmt(cs)}</span></div>`;h+=`<div class="fr-row"><span class="fr-label">Expected Income (${dd} days, ${ib.length} payments)</span><span class="fr-value green">+${fmt(fi)}</span></div>`;if(te>0)h+=`<div class="fr-row"><span class="fr-label">Planned Expenses</span><span class="fr-value red">-${fmt(te)}</span></div>`;h+=`<div class="fr-row" style="border-top:2px solid #d1d1d6;padding-top:10px;margin-top:4px"><span class="fr-label" style="font-weight:700">Projected Savings</span><span class="fr-value" style="font-size:1.1rem">${fmt(pr)}</span></div>`;h+=`<div class="fr-row"><span class="fr-label">% of 2026 Goal</span><span class="fr-value">${pp}%</span></div>`;if(ib.length){h+='<div class="fr-breakdown"><div class="fr-title">Incoming Payments</div>';ib.sort((a,b)=>a.date-b.date);for(const i of ib)h+=`<div class="fr-income-item"><span>${i.date.toLocaleDateString('en-US',{month:'short',day:'numeric'})} - ${i.label}</span><span style="color:#34c759;font-weight:600">+${fmt(i.amount)}</span></div>`;h+='</div>';}if(exps.length){h+='<div class="fr-breakdown" style="margin-top:10px"><div class="fr-title">Planned Expenses</div>';for(const x of exps)h+=`<div class="fr-income-item"><span>${x.name}</span><span style="color:#ff3b30;font-weight:600">-${fmt(x.amount)}</span></div>`;h+='</div>';}res.innerHTML=h;res.classList.add('show');}
+function addRow(containerId){var c=document.getElementById(containerId),r=document.createElement('div');r.className='expense-row';r.innerHTML='<input type="text" placeholder="Description" /><input type="number" placeholder="Amount" step="100" /><button onclick="removeRow(this)">&times;</button>';c.appendChild(r);}
+function removeRow(b){var c=b.parentElement.parentElement;if(c.children.length>1)b.parentElement.remove();else{var r=b.parentElement;r.querySelector('input[type="text"]').value='';r.querySelector('input[type="number"]').value='';}}
+function collectRows(containerId) {
+  var items = [], total = 0;
+  var rows = document.getElementById(containerId).children;
+  for (var i = 0; i < rows.length; i++) {
+    var n = rows[i].querySelector('input[type="text"]').value.trim();
+    var a = parseFloat(rows[i].querySelector('input[type="number"]').value) || 0;
+    if (a > 0) { items.push({ name: n || 'Unnamed', amount: a }); total += a; }
+  }
+  return { items: items, total: total };
+}
+
+function runForecast() {
+  var ds = document.getElementById('forecastDate').value;
+  if (!ds) return;
+  var td = new Date(ds + 'T23:59:59');
+  var today = new Date(); today.setHours(0,0,0,0);
+
+  // Collect additional income
+  var extra = collectRows('incomeRows');
+  // Collect planned expenses
+  var exps = collectRows('expenseRows');
+
+  // Expected income from schedule
+  var fi = 0, ib = [];
+  for (var m = 0; m < 12; m++) {
+    var e = EXPECTED[m];
+    for (var j = 0; j < 5; j++) {
+      if (state.checks[m][j]) continue;
+      var id = getPaymentDate(m, j);
+      if (id > today && id <= td) { fi += e[j]; ib.push({ label: INCOME_LABELS[j], date: id, amount: e[j] }); }
+    }
+  }
+
+  var cs = getActualSavings();
+  var totalIn = fi + extra.total;
+  var pr = cs + totalIn - exps.total;
+  var dd = Math.max(0, Math.ceil((td - today) / 864e5));
+  var gt = Object.values(EXPECTED).reduce(function(s, e) { return s + e.reduce(function(a, b) { return a + b; }, 0); }, 0);
+  var pp = ((pr / gt) * 100).toFixed(1);
+
+  var res = document.getElementById('forecastResult');
+  var h = '<h3>Forecast for ' + td.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) + '</h3>';
+  h += '<div class="fr-row"><span class="fr-label">Current Savings</span><span class="fr-value blue">' + fmt(cs) + '</span></div>';
+  h += '<div class="fr-row"><span class="fr-label">Expected Income (' + dd + ' days, ' + ib.length + ' payments)</span><span class="fr-value green">+' + fmt(fi) + '</span></div>';
+  if (extra.total > 0) h += '<div class="fr-row"><span class="fr-label">Additional Money</span><span class="fr-value green">+' + fmt(extra.total) + '</span></div>';
+  if (exps.total > 0) h += '<div class="fr-row"><span class="fr-label">Planned Expenses</span><span class="fr-value red">-' + fmt(exps.total) + '</span></div>';
+  h += '<div class="fr-row" style="border-top:2px solid #d1d1d6;padding-top:10px;margin-top:4px"><span class="fr-label" style="font-weight:700">Projected Savings</span><span class="fr-value" style="font-size:1.1rem">' + fmt(pr) + '</span></div>';
+  h += '<div class="fr-row"><span class="fr-label">% of 2026 Goal</span><span class="fr-value">' + pp + '%</span></div>';
+
+  // Breakdowns
+  if (ib.length) {
+    h += '<div class="fr-breakdown"><div class="fr-title">Scheduled Income</div>';
+    ib.sort(function(a, b) { return a.date - b.date; });
+    for (var k = 0; k < ib.length; k++) h += '<div class="fr-income-item"><span>' + ib[k].date.toLocaleDateString('en-US', { month:'short', day:'numeric' }) + ' - ' + ib[k].label + '</span><span style="color:#34c759;font-weight:600">+' + fmt(ib[k].amount) + '</span></div>';
+    h += '</div>';
+  }
+  if (extra.items.length) {
+    h += '<div class="fr-breakdown" style="margin-top:10px"><div class="fr-title">Additional Money</div>';
+    for (var ei = 0; ei < extra.items.length; ei++) h += '<div class="fr-income-item"><span>' + extra.items[ei].name + '</span><span style="color:#34c759;font-weight:600">+' + fmt(extra.items[ei].amount) + '</span></div>';
+    h += '</div>';
+  }
+  if (exps.items.length) {
+    h += '<div class="fr-breakdown" style="margin-top:10px"><div class="fr-title">Planned Expenses</div>';
+    for (var xi = 0; xi < exps.items.length; xi++) h += '<div class="fr-income-item"><span>' + exps.items[xi].name + '</span><span style="color:#ff3b30;font-weight:600">-' + fmt(exps.items[xi].amount) + '</span></div>';
+    h += '</div>';
+  }
+
+  res.innerHTML = h;
+  res.classList.add('show');
+}
 
 // ════════════════════════════════════
 //          BUDGET TRACKER
