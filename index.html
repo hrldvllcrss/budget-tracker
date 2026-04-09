@@ -379,9 +379,47 @@
     .budget-summary { grid-template-columns: repeat(2, 1fr); }
     .stat-card .stat-value { font-size: 0.92rem; }
   }
+
+  /* ── Lock screen ── */
+  .lock-screen {
+    position: fixed; inset: 0; z-index: 9999; background: #f5f5f7;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lock-box {
+    background: #fff; border: 1px solid #e5e5ea; border-radius: 16px;
+    padding: 36px 32px; width: 90%; max-width: 360px; text-align: center;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+  }
+  .lock-box h2 { font-size: 1.2rem; margin-bottom: 4px; }
+  .lock-box p { font-size: 0.8rem; color: #86868b; margin-bottom: 20px; }
+  .lock-box input {
+    width: 100%; padding: 12px 14px; border: 1px solid #d1d1d6; border-radius: 8px;
+    font-size: 1rem; text-align: center; margin-bottom: 12px; background: #fafafa;
+  }
+  .lock-box input:focus { outline: none; border-color: #007aff; box-shadow: 0 0 0 3px rgba(0,122,255,0.15); background: #fff; }
+  .lock-box button {
+    width: 100%; padding: 12px; background: #007aff; color: #fff; border: none;
+    border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer;
+  }
+  .lock-box button:hover { background: #0056d6; }
+  .lock-box .lock-error { color: #ff3b30; font-size: 0.8rem; margin-top: 8px; display: none; }
+  .lock-box .lock-remember { display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 16px; font-size: 0.8rem; color: #6e6e73; }
+  .lock-box .lock-remember input { width: auto; margin: 0; }
 </style>
 </head>
 <body>
+
+<!-- Lock screen -->
+<div class="lock-screen" id="lockScreen">
+  <div class="lock-box">
+    <h2>Finance Tracker</h2>
+    <p>Harold & Yssa 2026</p>
+    <input type="password" id="lockPassword" placeholder="Enter password" onkeydown="if(event.key==='Enter')unlock()" autofocus />
+    <label class="lock-remember"><input type="checkbox" id="lockRemember" /> Remember for 7 days</label>
+    <button onclick="unlock()">Unlock</button>
+    <div class="lock-error" id="lockError">Wrong password</div>
+  </div>
+</div>
 
 <button class="menu-toggle" onclick="toggleSidebar()">&#9776;</button>
 <div class="sidebar-backdrop" onclick="toggleSidebar()"></div>
@@ -569,6 +607,52 @@
 </div>
 
 <script>
+// ════════════════════════════════════
+//          PASSWORD LOCK
+// ════════════════════════════════════
+// To change your password: update the hash below.
+// Generate a new hash by running in browser console:
+//   hashPassword('yournewpassword').then(h => console.log(h))
+const PASSWORD_HASH = '3d637f36f32f480fc27d78efffc6576064d661a294b86c2f267b38b63d25c60e';
+const LOCK_KEY = 'financeUnlocked';
+
+async function hashPassword(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function unlock() {
+  const pw = document.getElementById('lockPassword').value;
+  const hash = await hashPassword(pw);
+  if (hash === PASSWORD_HASH) {
+    document.getElementById('lockScreen').style.display = 'none';
+    if (document.getElementById('lockRemember').checked) {
+      localStorage.setItem(LOCK_KEY, Date.now() + 7 * 24 * 60 * 60 * 1000);
+    } else {
+      sessionStorage.setItem(LOCK_KEY, '1');
+    }
+    document.getElementById('lockError').style.display = 'none';
+  } else {
+    document.getElementById('lockError').style.display = 'block';
+    document.getElementById('lockPassword').value = '';
+    document.getElementById('lockPassword').focus();
+  }
+}
+
+// Check if already unlocked
+(function checkLock() {
+  var remembered = localStorage.getItem(LOCK_KEY);
+  if (remembered && Date.now() < parseInt(remembered)) {
+    document.getElementById('lockScreen').style.display = 'none';
+    return;
+  }
+  localStorage.removeItem(LOCK_KEY);
+  if (sessionStorage.getItem(LOCK_KEY)) {
+    document.getElementById('lockScreen').style.display = 'none';
+    return;
+  }
+})();
+
 // ════════════════════════════════════
 //          SHARED STATE
 // ════════════════════════════════════
