@@ -383,6 +383,19 @@
   /* ── Button loading ── */
   button.loading { opacity: 0.6; pointer-events: none; }
 
+  /* ── Sync FAB ── */
+  .sync-fab {
+    position: fixed; bottom: 20px; right: 20px; z-index: 500;
+    width: 48px; height: 48px; border-radius: 50%; border: none;
+    background: #007aff; color: #fff; font-size: 1.2rem;
+    cursor: pointer; box-shadow: 0 3px 12px rgba(0,122,255,0.35);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .sync-fab:hover { background: #0056d6; transform: scale(1.05); }
+  .sync-fab.syncing { animation: spin 1s linear infinite; background: #ff9f0a; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
   /* ── Lock screen ── */
   .lock-screen {
     position: fixed; inset: 0; z-index: 9999; background: #f5f5f7;
@@ -411,6 +424,9 @@
 </style>
 </head>
 <body>
+
+<!-- Sync FAB -->
+<button class="sync-fab" id="syncFab" onclick="fabSync()" title="Sync with Google Sheets">&#8635;</button>
 
 <!-- Lock screen -->
 <div class="lock-screen" id="lockScreen">
@@ -941,6 +957,13 @@ function saveScriptUrl(){
   SCRIPT_URL=u; localStorage.setItem(URL_KEY,u);
   updateSettingsUI(); syncFromSheet();
 }
+async function fabSync() {
+  var fab = document.getElementById('syncFab');
+  fab.classList.add('syncing');
+  await syncFromSheet();
+  fab.classList.remove('syncing');
+}
+
 async function syncNow(btn) {
   btnLoading(btn, true);
   btn.textContent = 'Syncing...';
