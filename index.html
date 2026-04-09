@@ -853,8 +853,17 @@ async function syncFromSheet() {
   if (!SCRIPT_URL) return;
   setSyncStatus('loading', 'Syncing...');
   try {
-    const r = await fetch(SCRIPT_URL);
-    const d = await r.json();
+    const r = await fetch(SCRIPT_URL, { redirect: 'follow' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var text = await r.text();
+    console.log('Sync response:', text.substring(0, 200));
+    var d;
+    try { d = JSON.parse(text); } catch(pe) {
+      // Apps Script sometimes wraps in HTML — try to extract JSON
+      var match = text.match(/\{[\s\S]*\}/);
+      if (match) d = JSON.parse(match[0]);
+      else throw new Error('Invalid response');
+    }
     if (d.error) throw new Error(d.error);
 
     // Savings
@@ -862,8 +871,8 @@ async function syncFromSheet() {
       state.haroldBalance = d.savings.haroldBalance || 0;
       state.yssaBalance = d.savings.yssaBalance || 0;
       state.checks = {};
-      for (let m = 0; m < 12; m++) state.checks[m] = d.savings.checks[m] || [false,false,false,false,false];
-      if (d.savings.amounts) for (let m = 0; m < 12; m++) if (d.savings.amounts[m]) EXPECTED[m] = d.savings.amounts[m];
+      for (var m = 0; m < 12; m++) state.checks[m] = d.savings.checks[m] || [false,false,false,false,false];
+      if (d.savings.amounts) for (var m2 = 0; m2 < 12; m2++) if (d.savings.amounts[m2]) EXPECTED[m2] = d.savings.amounts[m2];
       saveLocal();
     }
 
@@ -881,52 +890,38 @@ async function syncFromSheet() {
 
     render(); renderBudget(); updateBudgetBadge();
     setSyncStatus('ok', 'Synced with Google Sheets');
-  } catch(e) {
-    console.error(e);
-    setSyncStatus('error', 'Sync failed — using local data');
+  } catch(err) {
+    console.error('Sync error:', err);
+    setSyncStatus('error', 'Sync failed — ' + err.message);
   }
 }
 
-// Push savings income toggle + updated balance
-async function pushToggle(m, c, v) {
+async function pushToSheet(payload) {
   if (!SCRIPT_URL) return;
   try {
-    await fetch(SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'toggleIncome', toggle: { month: m, col: c, value: v },
-        haroldBalance: state.haroldBalance, yssaBalance: state.yssaBalance })
+    var r = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload),
+      redirect: 'follow'
     });
-  } catch(e) { console.error('Push failed:', e); }
+    console.log('Push OK:', payload.action);
+  } catch(err) { console.error('Push failed:', payload.action, err); }
 }
 
-// Push account balances
-async function pushSavings() {
-  if (!SCRIPT_URL) return;
-  try {
-    await fetch(SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'updateBalances',
-        haroldBalance: state.haroldBalance, yssaBalance: state.yssaBalance })
-    });
-  } catch(e) { console.error('Push failed:', e); }
+function pushToggle(m, c, v) {
+  pushToSheet({ action: 'toggleIncome', toggle: { month: m, col: c, value: v },
+    haroldBalance: state.haroldBalance, yssaBalance: state.yssaBalance });
 }
-
-// Push budget checkbox toggle
-async function pushBudgetToggle(key, value) {
-  if (!SCRIPT_URL) return;
-  try {
-    await fetch(SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'toggleBudget', key, value })
-    });
-  } catch(e) { console.error('Push failed:', e); }
+function pushSavings() {
+  pushToSheet({ action: 'updateBalances',
+    haroldBalance: state.haroldBalance, yssaBalance: state.yssaBalance });
 }
-
-// Push custom budget items
-async function pushBudgetItems() {
-  if (!SCRIPT_URL) return;
-  try {
-    await fetch(SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'saveBudgetItems', items: BUDGET_ITEMS })
-    });
-  } catch(e) { console.error('Push failed:', e); }
+function pushBudgetToggle(key, value) {
+  pushToSheet({ action: 'toggleBudget', key: key, value: value });
+}
+function pushBudgetItems() {
+  pushToSheet({ action: 'saveBudgetItems', items: BUDGET_ITEMS });
 }
 function saveScriptUrl(){
   const u=document.getElementById('scriptUrlInput').value.trim();
