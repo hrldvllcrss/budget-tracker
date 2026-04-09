@@ -380,6 +380,18 @@
     .stat-card .stat-value { font-size: 0.92rem; }
   }
 
+  /* ── Saving indicator ── */
+  .saving-indicator {
+    position: fixed; top: 12px; right: 12px; z-index: 500;
+    background: #fff; border: 1px solid #e5e5ea; border-radius: 8px;
+    padding: 6px 14px; font-size: 0.78rem; color: #6e6e73; font-weight: 600;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 8px;
+  }
+  .saving-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #ff9f0a;
+    animation: pulse 0.8s infinite;
+  }
+
   /* ── Lock screen ── */
   .lock-screen {
     position: fixed; inset: 0; z-index: 9999; background: #f5f5f7;
@@ -408,6 +420,11 @@
 </style>
 </head>
 <body>
+
+<!-- Saving indicator -->
+<div class="saving-indicator" id="savingIndicator" style="display:none">
+  <div class="saving-dot"></div> Saving...
+</div>
 
 <!-- Lock screen -->
 <div class="lock-screen" id="lockScreen">
@@ -889,15 +906,27 @@ async function syncFromSheet() {
     }
 
     render(); renderBudget(); updateBudgetBadge();
-    setSyncStatus('ok', 'Synced with Google Sheets');
+    var now = new Date();
+    setSyncStatus('ok', 'Synced — ' + now.toLocaleTimeString());
   } catch(err) {
     console.error('Sync error:', err);
     setSyncStatus('error', 'Sync failed — ' + err.message);
   }
 }
 
+var pushQueue = 0;
+function showSaving() {
+  pushQueue++;
+  document.getElementById('savingIndicator').style.display = 'flex';
+}
+function hideSaving() {
+  pushQueue = Math.max(0, pushQueue - 1);
+  if (pushQueue === 0) document.getElementById('savingIndicator').style.display = 'none';
+}
+
 async function pushToSheet(payload) {
   if (!SCRIPT_URL) return;
+  showSaving();
   try {
     var r = await fetch(SCRIPT_URL, {
       method: 'POST',
@@ -907,6 +936,7 @@ async function pushToSheet(payload) {
     });
     console.log('Push OK:', payload.action);
   } catch(err) { console.error('Push failed:', payload.action, err); }
+  hideSaving();
 }
 
 function pushToggle(m, c, v) {
