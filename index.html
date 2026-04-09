@@ -854,7 +854,25 @@ function render() {
   document.getElementById('totalSavingsDisplay').textContent=fmt(saved);
 }
 
-function toggleCheck(m,j,checked,cb) {
+// Debounced bulk sync for checkboxes
+var savingsDebounce = null;
+var budgetDebounce = null;
+
+function flashRow(el) {
+  el.classList.remove('saved-flash');
+  void el.offsetWidth;
+  el.classList.add('saved-flash');
+  el.addEventListener('animationend', function() { el.classList.remove('saved-flash'); }, { once: true });
+}
+
+function showSyncFabSaving() {
+  document.getElementById('syncFab').classList.add('syncing');
+}
+function hideSyncFabSaving() {
+  document.getElementById('syncFab').classList.remove('syncing');
+}
+
+function toggleCheck(m,j,checked) {
   var amt=EXPECTED[m][j];
   if(isHaroldCol(j)) state.haroldBalance+=checked?amt:-amt;
   else state.yssaBalance+=checked?amt:-amt;
@@ -863,14 +881,15 @@ function toggleCheck(m,j,checked,cb) {
   // Flash the row
   var row = document.getElementById('tableBody').children[m];
   if(row) flashRow(row);
-  pushToggle(m,j,checked);
-}
-
-function flashRow(el) {
-  el.classList.remove('saved-flash');
-  void el.offsetWidth; // force reflow
-  el.classList.add('saved-flash');
-  el.addEventListener('animationend', function() { el.classList.remove('saved-flash'); }, { once: true });
+  // Debounce: wait 800ms then push all savings state at once
+  clearTimeout(savingsDebounce);
+  showSyncFabSaving();
+  savingsDebounce = setTimeout(function() {
+    pushToSheet({ action: 'updateBalances', haroldBalance: state.haroldBalance, yssaBalance: state.yssaBalance });
+    // Push all checkbox states by toggling each changed one — or just push balances + the toggle
+    pushToSheet({ action: 'toggleIncome', toggle: { month: m, col: j, value: checked },
+      haroldBalance: state.haroldBalance, yssaBalance: state.yssaBalance }).then(hideSyncFabSaving);
+  }, 800);
 }
 function updateAccount(who, btn) {
   var v=parseInt(document.getElementById(who==='harold'?'haroldInput':'yssaInput').value);
@@ -1077,51 +1096,61 @@ function toggleBudgetItem(month, period, index) {
   saveBudgetState();
   renderBudget();
   updateBudgetBadge();
-  pushBudgetToggle(key, budgetState[key]);
+  // Debounce budget pushes
+  clearTimeout(budgetDebounce);
+  showSyncFabSaving();
+  budgetDebounce = setTimeout(function() {
+    pushToSheet({ action: 'saveBudgetChecks', checks: budgetState }).then(hideSyncFabSaving);
+  }, 800);
   // Flash the item
   var items = document.querySelectorAll('#budgetContent .budget-item');
-  var offset = period === '30th' ? BUDGET_ITEMS['15th'].length + 1 : 0; // +1 for add row
+  var offset = period === '30th' ? BUDGET_ITEMS['15th'].length + 1 : 0;
   var el = items[offset + index];
   if(el) flashRow(el);
 }
 
-function addBudgetItem(period, btn) {
+async function addBudgetItem(period, btn) {
   var nameEl = document.getElementById('addName_' + period);
   var amtEl = document.getElementById('addAmt_' + period);
   var name = nameEl.value.trim();
   var amount = parseFloat(amtEl.value) || 0;
   if (!name) return;
+  // Add to local state
   BUDGET_ITEMS[period].push({ name: name, amount: amount });
   saveBudgetItems();
-  pushToSheet({ action: 'saveBudgetItems', items: BUDGET_ITEMS }, btn);
+  // Push to DB with loading on button
+  btnLoading(btn, true);
+  await pushToSheet({ action: 'saveBudgetItems', items: BUDGET_ITEMS });
+  btnLoading(btn, false);
+  // Only update UI after DB confirms
   nameEl.value = ''; amtEl.value = '';
   renderBudget();
   updateBudgetBadge();
 }
 
-function removeBudgetItem(period, index) {
-  const item = BUDGET_ITEMS[period][index];
-  if (!confirm(`Remove "${item.name}" from ${period} bills?`)) return;
+async function removeBudgetItem(period, index, btn) {
+  var item = BUDGET_ITEMS[period][index];
+  if (!confirm('Remove "' + item.name + '" from ' + period + ' bills?')) return;
+  // Show loading on the remove button
+  if (btn) { btn.textContent = '...'; btn.disabled = true; }
   BUDGET_ITEMS[period].splice(index, 1);
-  saveBudgetItems();
   // Clean up check states for this period (shift indices down)
-  for (let m = 0; m < 12; m++) {
-    const newState = {};
-    BUDGET_ITEMS[period].forEach((_, i) => {
-      const oldKey = getBudgetKey(m, period, i >= index ? i + 1 : i);
-      const newKey = getBudgetKey(m, period, i);
+  for (var m = 0; m < 12; m++) {
+    var newState = {};
+    for (var i = 0; i < BUDGET_ITEMS[period].length; i++) {
+      var oldKey = getBudgetKey(m, period, i >= index ? i + 1 : i);
+      var newKey = getBudgetKey(m, period, i);
       if (budgetState[oldKey]) newState[newKey] = true;
-    });
-    // Clear old keys for this month/period
-    BUDGET_ITEMS[period].forEach((_, i) => { delete budgetState[getBudgetKey(m, period, i)]; });
-    // Also clear the now-gone last index
+    }
+    for (var j = 0; j < BUDGET_ITEMS[period].length; j++) delete budgetState[getBudgetKey(m, period, j)];
     delete budgetState[getBudgetKey(m, period, BUDGET_ITEMS[period].length)];
-    // Apply new
     Object.assign(budgetState, newState);
   }
   saveBudgetState();
   saveBudgetItems();
-  pushBudgetItems();
+  // Push to DB first, then update UI
+  await pushToSheet({ action: 'saveBudgetItems', items: BUDGET_ITEMS });
+  await pushToSheet({ action: 'saveBudgetChecks', checks: budgetState });
   renderBudget();
   updateBudgetBadge();
 }
@@ -1148,7 +1177,7 @@ function renderBudget() {
         <input type="checkbox" class="bi-check" ${checked?'checked':''} onchange="toggleBudgetItem(${budgetMonth},'${period}',${i})" />
         <span class="bi-name">${item.name}</span>
         <span class="bi-amount">${item.amount > 0 ? fmt(item.amount) : '-'}</span>
-        <button class="bi-remove" onclick="removeBudgetItem('${period}',${i})" title="Remove">&times;</button>
+        <button class="bi-remove" onclick="removeBudgetItem('${period}',${i},this)" title="Remove">&times;</button>
       </div>`;
     });
 
