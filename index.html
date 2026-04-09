@@ -383,6 +383,10 @@
   /* ── Button loading ── */
   button.loading { opacity: 0.6; pointer-events: none; }
 
+  /* ── Checkbox saved flash ── */
+  .saved-flash { animation: flashGreen 0.6s ease; }
+  @keyframes flashGreen { 0% { background: #d4edda; } 100% { background: transparent; } }
+
   /* ── Sync FAB ── */
   .sync-fab {
     position: fixed; bottom: 20px; right: 20px; z-index: 500;
@@ -850,13 +854,23 @@ function render() {
   document.getElementById('totalSavingsDisplay').textContent=fmt(saved);
 }
 
-function toggleCheck(m,j,checked) {
-  const amt=EXPECTED[m][j];
+function toggleCheck(m,j,checked,cb) {
+  var amt=EXPECTED[m][j];
   if(isHaroldCol(j)) state.haroldBalance+=checked?amt:-amt;
   else state.yssaBalance+=checked?amt:-amt;
   state.checks[m][j]=checked;
   saveLocal(); render();
-  pushToggle(m,j,checked); pushSavings();
+  // Flash the row
+  var row = document.getElementById('tableBody').children[m];
+  if(row) flashRow(row);
+  pushToggle(m,j,checked);
+}
+
+function flashRow(el) {
+  el.classList.remove('saved-flash');
+  void el.offsetWidth; // force reflow
+  el.classList.add('saved-flash');
+  el.addEventListener('animationend', function() { el.classList.remove('saved-flash'); }, { once: true });
 }
 function updateAccount(who, btn) {
   var v=parseInt(document.getElementById(who==='harold'?'haroldInput':'yssaInput').value);
@@ -1058,12 +1072,17 @@ function changeBudgetMonth(delta) {
 }
 
 function toggleBudgetItem(month, period, index) {
-  const key = getBudgetKey(month, period, index);
+  var key = getBudgetKey(month, period, index);
   budgetState[key] = !budgetState[key];
   saveBudgetState();
   renderBudget();
   updateBudgetBadge();
   pushBudgetToggle(key, budgetState[key]);
+  // Flash the item
+  var items = document.querySelectorAll('#budgetContent .budget-item');
+  var offset = period === '30th' ? BUDGET_ITEMS['15th'].length + 1 : 0; // +1 for add row
+  var el = items[offset + index];
+  if(el) flashRow(el);
 }
 
 function addBudgetItem(period, btn) {
