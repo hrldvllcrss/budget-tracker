@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2026 Budget Tracker</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f5f7; color: #1d1d1f; padding: 20px; }
+  h1 { text-align: center; margin-bottom: 6px; font-size: 1.6rem; color: #1d1d1f; }
+  .subtitle { text-align: center; color: #86868b; margin-bottom: 20px; font-size: 0.85rem; }
+
+  /* Sync bar */
+  .sync-bar { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .sync-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .sync-dot.ok { background: #34c759; }
+  .sync-dot.loading { background: #ff9f0a; animation: pulse 1s infinite; }
+  .sync-dot.error { background: #ff3b30; }
+  .sync-dot.offline { background: #aeaeb2; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+  .sync-text { font-size: 0.78rem; color: #86868b; }
+  .sync-bar button { background: none; border: 1px solid #d1d1d6; border-radius: 6px; padding: 4px 12px; font-size: 0.75rem; color: #007aff; cursor: pointer; }
+  .sync-bar button:hover { background: #e8f0fe; }
+
+  /* Config banner */
+  .config-banner { background: #fff3e0; border: 1px solid #ffe0b2; border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; text-align: center; }
+  .config-banner input { width: 100%; max-width: 500px; padding: 8px 12px; border: 1px solid #d1d1d6; border-radius: 6px; font-size: 0.85rem; margin: 8px 0; }
+  .config-banner button { background: #007aff; color: #fff; border: none; border-radius: 6px; padding: 8px 18px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+  .config-banner .hint { font-size: 0.75rem; color: #86868b; margin-top: 4px; }
+
+  /* Savings override */
+  .savings-override { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+  .savings-override label { font-size: 0.85rem; color: #6e6e73; }
+  .savings-override input {
+    background: #fff; border: 1px solid #d1d1d6; border-radius: 6px; color: #1d1d1f;
+    padding: 8px 14px; font-size: 1rem; width: 160px; text-align: right;
+  }
+  .savings-override input:focus { outline: none; border-color: #007aff; box-shadow: 0 0 0 3px rgba(0,122,255,0.15); }
+  .savings-override button {
+    background: #007aff; color: #fff; border: none; border-radius: 6px;
+    padding: 8px 18px; cursor: pointer; font-size: 0.85rem; font-weight: 600;
+  }
+  .savings-override button:hover { background: #0056d6; }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; margin-bottom: 24px; background: #fff; border-radius: 12px; border: 1px solid #e5e5ea; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  table { width: 100%; border-collapse: collapse; min-width: 900px; }
+  th { background: #fafafa; padding: 10px 8px; font-size: 0.7rem; text-transform: uppercase;
+       letter-spacing: 1px; color: #86868b; border-bottom: 2px solid #e5e5ea; white-space: nowrap; }
+  th.section-harold { border-top: 3px solid #007aff; }
+  th.section-yssa { border-top: 3px solid #af52de; }
+  td { padding: 8px; text-align: center; border-bottom: 1px solid #f0f0f2; font-size: 0.9rem; }
+  tr:hover { background: #f5f5f7; }
+  td.month { text-align: left; font-weight: 600; padding-left: 14px; color: #1d1d1f; }
+  td.amount { color: #3a3a3c; font-variant-numeric: tabular-nums; }
+  td.total { font-weight: 700; color: #1d1d1f; }
+  td.cumulative { font-weight: 700; color: #5856d6; }
+  td.expected { color: #86868b; }
+  td.variance.pos { color: #34c759; }
+  td.variance.neg { color: #ff3b30; }
+  td.variance.zero { color: #86868b; }
+
+  /* Status badges */
+  .badge { padding: 3px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .badge.met { background: #e8f9ee; color: #248a3d; }
+  .badge.behind { background: #fff3e0; color: #c93400; }
+  .badge.pending { background: #f0f0f2; color: #aeaeb2; }
+
+  /* Checkbox styling */
+  input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: #007aff; }
+
+  /* Progress section */
+  .progress-section { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: #fff; border: 1px solid #e5e5ea; border-radius: 10px; padding: 16px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .stat-card .stat-label { font-size: 0.75rem; color: #86868b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .stat-card .stat-value { font-size: 1.5rem; font-weight: 700; }
+  .stat-card .stat-value.green { color: #34c759; }
+  .stat-card .stat-value.red { color: #ff3b30; }
+  .stat-card .stat-value.blue { color: #007aff; }
+  .stat-card .stat-value.yellow { color: #ff9f0a; }
+
+  /* Progress bar */
+  .progress-bar-wrap { margin-bottom: 24px; }
+  .progress-bar-bg { background: #e5e5ea; border-radius: 10px; height: 28px; overflow: hidden; position: relative; }
+  .progress-bar-fill { height: 100%; border-radius: 10px; transition: width 0.5s ease; background: linear-gradient(90deg, #007aff, #5ac8fa); }
+  .progress-bar-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 0.8rem; font-weight: 700; color: #1d1d1f; }
+
+  /* Recalibration note */
+  .recal-note { background: #f0ecf9; border: 1px solid #d6cce8; border-radius: 10px; padding: 14px 18px; margin-bottom: 24px; }
+  .recal-note .title { color: #5856d6; font-weight: 700; font-size: 0.85rem; margin-bottom: 4px; }
+  .recal-note .body { color: #6e6e73; font-size: 0.82rem; line-height: 1.5; }
+
+  .footer { text-align: center; color: #aeaeb2; font-size: 0.75rem; margin-top: 30px; }
+
+  @media (max-width: 600px) {
+    body { padding: 10px; }
+    h1 { font-size: 1.2rem; }
+  }
+</style>
+</head>
+<body>
+
+<h1>2026 Savings Goal Tracker</h1>
+<p class="subtitle">Harold & Yssa - Recalibrated as of April 10, 2026</p>
+
+<!-- Config: Apps Script URL -->
+<div class="config-banner" id="configBanner">
+  <strong>Connect to Google Sheets</strong><br>
+  <input type="text" id="scriptUrlInput" placeholder="Paste your Google Apps Script Web App URL here..." />
+  <br>
+  <button onclick="saveScriptUrl()">Connect</button>
+  <div class="hint">See setup instructions to get your URL</div>
+</div>
+
+<!-- Sync status -->
+<div class="sync-bar" id="syncBar" style="display:none">
+  <span class="sync-dot" id="syncDot"></span>
+  <span class="sync-text" id="syncText">Checking...</span>
+  <button onclick="syncFromSheet()">Refresh</button>
+</div>
+
+<div class="recal-note">
+  <div class="title">Recalibration Note</div>
+  <div class="body">
+    Starting balance reset to <strong>375,000</strong> as of April 10, 2026 due to unexpected expenses.
+    All income inputs through April 10 are marked as received. Expected inputs remain unchanged going forward.
+    <span id="adjustmentInfo"></span>
+  </div>
+</div>
+
+<div class="savings-override">
+  <label>Actual Current Savings:</label>
+  <input type="number" id="actualSavings" step="1000" />
+  <button onclick="setActualSavings()">Update</button>
+</div>
+
+<!-- Progress bar -->
+<div class="progress-bar-wrap">
+  <div class="progress-bar-bg">
+    <div class="progress-bar-fill" id="progressFill"></div>
+    <div class="progress-bar-text" id="progressText"></div>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="progress-section">
+  <div class="stat-card"><div class="stat-label">2026 Goal</div><div class="stat-value blue" id="statGoal"></div></div>
+  <div class="stat-card"><div class="stat-label">Actual Saved</div><div class="stat-value green" id="statSaved"></div></div>
+  <div class="stat-card"><div class="stat-label">Remaining</div><div class="stat-value yellow" id="statRemaining"></div></div>
+  <div class="stat-card"><div class="stat-label">Projected Year-End</div><div class="stat-value" id="statProjected"></div></div>
+  <div class="stat-card"><div class="stat-label">Monthly Target (Remaining)</div><div class="stat-value blue" id="statMonthlyTarget"></div></div>
+</div>
+
+<!-- Table -->
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th></th>
+      <th class="section-harold" colspan="2">Harold 10th</th>
+      <th class="section-harold" colspan="2">Harold 25th</th>
+      <th class="section-harold" colspan="2">Harold 30th</th>
+      <th class="section-yssa" colspan="2">Yssa 15th</th>
+      <th class="section-yssa" colspan="2">Yssa 30th</th>
+      <th>Monthly Total</th>
+      <th>Status</th>
+      <th>Cumulative</th>
+      <th>Expected</th>
+      <th>Variance</th>
+    </tr>
+  </thead>
+  <tbody id="tableBody"></tbody>
+  <tfoot>
+    <tr style="border-top:2px solid #e5e5ea">
+      <td class="month">ANNUAL</td>
+      <td class="total" id="annH10" colspan="2"></td>
+      <td class="total" id="annH25" colspan="2"></td>
+      <td class="total" id="annH30" colspan="2"></td>
+      <td class="total" id="annY15" colspan="2"></td>
+      <td class="total" id="annY30" colspan="2"></td>
+      <td class="total" id="annTotal"></td>
+      <td colspan="4"></td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+
+<div class="footer">Budget Tracker - Synced with Google Sheets | <a href="#" onclick="disconnect()" style="color:#ff3b30;text-decoration:none">Disconnect</a></div>
+
+<script>
+const MONTHS = ['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
+
+// Default expected amounts per month [H10, H25, H30, Y15, Y30]
+const DEFAULT_EXPECTED = {
+  0: [60000,60000,15000,11000,12000],
+  1: [60000,60000, 7000, 9000,12000],
+};
+for (let i=2;i<12;i++) DEFAULT_EXPECTED[i] = [60000,60000,15000,9000,12000];
+
+const LOCAL_KEY = 'budget2026';
+const URL_KEY = 'budget2026_scriptUrl';
+
+// ── State ──
+let SCRIPT_URL = localStorage.getItem(URL_KEY) || '';
+let EXPECTED = JSON.parse(JSON.stringify(DEFAULT_EXPECTED));
+let state = loadLocal();
+
+function getDefaultState() {
+  const checks = {};
+  for (let m=0;m<12;m++) checks[m] = [false,false,false,false,false];
+  for (let m=0;m<3;m++) checks[m] = [true,true,true,true,true];
+  checks[3] = [true,false,false,false,false];
+  return { checks, actualSavings: 375000 };
+}
+
+function loadLocal() {
+  try { const s = localStorage.getItem(LOCAL_KEY); if (s) return JSON.parse(s); } catch(e) {}
+  return getDefaultState();
+}
+function saveLocal() { localStorage.setItem(LOCAL_KEY, JSON.stringify(state)); }
+
+// ── Google Sheets sync ──
+function setSyncStatus(type, msg) {
+  const dot = document.getElementById('syncDot');
+  const txt = document.getElementById('syncText');
+  dot.className = 'sync-dot ' + type;
+  txt.textContent = msg;
+}
+
+async function syncFromSheet() {
+  if (!SCRIPT_URL) return;
+  setSyncStatus('loading', 'Syncing...');
+  try {
+    const res = await fetch(SCRIPT_URL);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    state.actualSavings = data.actualSavings;
+    state.checks = {};
+    for (let m=0;m<12;m++) {
+      state.checks[m] = data.checks[m] || [false,false,false,false,false];
+    }
+    // Update amounts from sheet
+    if (data.amounts) {
+      for (let m=0;m<12;m++) {
+        if (data.amounts[m]) EXPECTED[m] = data.amounts[m];
+      }
+    }
+    saveLocal();
+    render();
+    setSyncStatus('ok', 'Synced with Google Sheets');
+  } catch(err) {
+    console.error(err);
+    setSyncStatus('error', 'Sync failed - using local data');
+  }
+}
+
+async function pushToggle(month, col, value) {
+  if (!SCRIPT_URL) return;
+  try {
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ toggle: { month, col, value } })
+    });
+  } catch(err) { console.error('Push failed:', err); }
+}
+
+async function pushSavings(val) {
+  if (!SCRIPT_URL) return;
+  try {
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ actualSavings: val })
+    });
+  } catch(err) { console.error('Push failed:', err); }
+}
+
+// ── Config ──
+function saveScriptUrl() {
+  const url = document.getElementById('scriptUrlInput').value.trim();
+  if (!url) return;
+  SCRIPT_URL = url;
+  localStorage.setItem(URL_KEY, url);
+  document.getElementById('configBanner').style.display = 'none';
+  document.getElementById('syncBar').style.display = 'flex';
+  syncFromSheet();
+}
+
+function disconnect() {
+  if (!confirm('Disconnect from Google Sheets? Local data will be kept.')) return;
+  SCRIPT_URL = '';
+  localStorage.removeItem(URL_KEY);
+  document.getElementById('configBanner').style.display = 'block';
+  document.getElementById('syncBar').style.display = 'none';
+}
+
+// ── Init config UI ──
+function initConfig() {
+  if (SCRIPT_URL) {
+    document.getElementById('configBanner').style.display = 'none';
+    document.getElementById('syncBar').style.display = 'flex';
+    syncFromSheet();
+  }
+}
+
+// ── Render ──
+function fmt(n) { return n.toLocaleString('en-PH'); }
+
+function getMonthlyExpected() { return 60000+60000+15000+9000+12000; }
+
+function render() {
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+
+  let checkedTotal = 0;
+  for (let m=0;m<12;m++) {
+    for (let j=0;j<5;j++) {
+      if (state.checks[m][j]) checkedTotal += EXPECTED[m][j];
+    }
+  }
+  const adjustment = state.actualSavings - checkedTotal;
+
+  let cumulative = 0;
+  const monthlyPer = getMonthlyExpected();
+  let annH10=0, annH25=0, annH30=0, annY15=0, annY30=0;
+  let totalAnnual = 0;
+  for (let m=0;m<12;m++) {
+    const e = EXPECTED[m];
+    totalAnnual += e[0]+e[1]+e[2]+e[3]+e[4];
+  }
+
+  for (let m=0;m<12;m++) {
+    const e = EXPECTED[m];
+    const c = state.checks[m];
+
+    let monthTotal = 0;
+    for (let j=0;j<5;j++) { if (c[j]) monthTotal += e[j]; }
+    cumulative += monthTotal;
+
+    annH10 += e[0]; annH25 += e[1]; annH30 += e[2]; annY15 += e[3]; annY30 += e[4];
+
+    const expectedCum = monthlyPer * (m+1);
+    const actualCum = cumulative + adjustment;
+    const variance = actualCum - expectedCum;
+
+    let status, badgeClass;
+    const allChecked = c.every(v=>v);
+    const anyChecked = c.some(v=>v);
+    if (allChecked && monthTotal > 0) {
+      status = monthTotal >= monthlyPer ? 'MET' : 'BEHIND';
+      badgeClass = status === 'MET' ? 'met' : 'behind';
+    } else if (anyChecked) {
+      status = 'IN PROGRESS';
+      badgeClass = 'behind';
+    } else {
+      status = 'PENDING';
+      badgeClass = 'pending';
+    }
+
+    const tr = document.createElement('tr');
+    let html = `<td class="month">${MONTHS[m]}</td>`;
+    for (let j=0;j<5;j++) {
+      html += `<td class="amount">${fmt(e[j])}</td>`;
+      html += `<td><input type="checkbox" ${c[j]?'checked':''} onchange="toggleCheck(${m},${j},this.checked)"></td>`;
+    }
+    html += `<td class="total">${fmt(monthTotal)}</td>`;
+    html += `<td><span class="badge ${badgeClass}">${status}</span></td>`;
+    html += `<td class="cumulative">${fmt(actualCum)}</td>`;
+    html += `<td class="expected">${fmt(expectedCum)}</td>`;
+    const varClass = variance > 0 ? 'pos' : variance < 0 ? 'neg' : 'zero';
+    html += `<td class="variance ${varClass}">${variance >= 0 ? '+' : ''}${fmt(variance)}</td>`;
+    tr.innerHTML = html;
+    tbody.appendChild(tr);
+  }
+
+  document.getElementById('annH10').textContent = fmt(annH10);
+  document.getElementById('annH25').textContent = fmt(annH25);
+  document.getElementById('annH30').textContent = fmt(annH30);
+  document.getElementById('annY15').textContent = fmt(annY15);
+  document.getElementById('annY30').textContent = fmt(annY30);
+  document.getElementById('annTotal').textContent = fmt(totalAnnual);
+
+  const goal = totalAnnual;
+  const saved = state.actualSavings;
+  let uncheckedIncome = 0;
+  for (let m=0;m<12;m++) {
+    for (let j=0;j<5;j++) {
+      if (!state.checks[m][j]) uncheckedIncome += EXPECTED[m][j];
+    }
+  }
+  const projectedYearEnd = saved + uncheckedIncome;
+  let monthsWithUnchecked = 0;
+  for (let m=0;m<12;m++) { if (state.checks[m].some(v=>!v)) monthsWithUnchecked++; }
+  const remaining = goal - saved;
+  const monthlyTarget = monthsWithUnchecked > 0 ? Math.ceil(remaining / monthsWithUnchecked) : 0;
+
+  document.getElementById('statGoal').textContent = fmt(goal);
+  document.getElementById('statSaved').textContent = fmt(saved);
+  document.getElementById('statRemaining').textContent = fmt(remaining);
+  const projEl = document.getElementById('statProjected');
+  projEl.textContent = fmt(projectedYearEnd);
+  projEl.className = 'stat-value ' + (projectedYearEnd >= goal ? 'green' : 'yellow');
+  document.getElementById('statMonthlyTarget').textContent = fmt(monthlyTarget);
+
+  const pct = Math.min((saved / goal) * 100, 100);
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = pct.toFixed(1) + '% of ' + fmt(goal);
+
+  const adjEl = document.getElementById('adjustmentInfo');
+  if (adjustment < 0) {
+    adjEl.innerHTML = `<br>Adjustment: <strong>${fmt(adjustment)}</strong> (expenses exceeded tracked income by this amount).`;
+  } else {
+    adjEl.innerHTML = '';
+  }
+
+  document.getElementById('actualSavings').value = state.actualSavings;
+}
+
+function toggleCheck(m, j, checked) {
+  state.checks[m][j] = checked;
+  saveLocal();
+  render();
+  pushToggle(m, j, checked);
+}
+
+function setActualSavings() {
+  const val = parseInt(document.getElementById('actualSavings').value);
+  if (!isNaN(val) && val >= 0) {
+    state.actualSavings = val;
+    saveLocal();
+    render();
+    pushSavings(val);
+  }
+}
+
+// Boot
+render();
+initConfig();
+</script>
+
+</body>
+</html>
